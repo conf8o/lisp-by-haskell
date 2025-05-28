@@ -12,10 +12,8 @@ main = do
 sPlus :: S.Data
 sPlus =
   S.eval $
-    S.List
-      ( S.Fn S.plus,
-        S.List
-          ( S.Value (S.Integer 1),
-            S.Value (S.Integer 2)
-          )
-      )
+    S.list
+      [ S.plus,
+        S.Integer 1,
+        S.Integer 2
+      ]
