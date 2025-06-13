@@ -3,7 +3,11 @@ module S (eval, plus, list, Special (..), Data (..)) where
 import Control.Monad.State
 import qualified Data.HashMap.Strict as HM
 
-data Data = Integer Integer | Char Char | Bool Bool | String String | List Data Data | Nil | Fn (Data -> Env Data) | Symbol String | Special Special | Error String
+type Cons = (Data, Data)
+
+type Fn = (Data -> Env Data)
+
+data Data = Integer Integer | Char Char | Bool Bool | String String | List Cons | Nil | Function Fn | Symbol String | Special Special | Error String
 
 data Special = If | Let | Quote
 
@@ -12,10 +16,8 @@ type EnvStack = [HM.HashMap String Data]
 type Env = State EnvStack
 
 eval :: Data -> Env Data
-eval (List data1 data2) =
-  case (data1, data2) of
-    (Fn f, List x xs) -> f =<< evalList (List x xs)
-    _ -> return $ Error "未実装"
+eval (List (Function f, List args)) = applyFunction f args
+eval (List (Special f, List expr)) = applySpecial f expr
 eval (Symbol s) = do
   env <- get
   case lookupEnv s env of
@@ -23,10 +25,24 @@ eval (Symbol s) = do
     Nothing -> return $ Error ("Unbound symbol: " ++ s)
 eval x = return x
 
-evalList :: Data -> Env Data
-evalList Nil = return Nil
-evalList (List x xs) = List <$> eval x <*> evalList xs
+evalList :: Cons -> Env Data
+evalList (x, List xs) = fmap List $ (,) <$> eval x <*> evalList xs
 evalList _ = return $ Error ""
+
+applyFunction :: Fn -> Cons -> Env Data
+applyFunction fn args =
+  fn =<< evalList args
+
+applySpecial :: Special -> Cons -> Env Data
+applySpecial If (Bool p, List (then', List (else', Nil))) =
+  if p then eval then' else eval else'
+applySpecial _ _ = return $ Error "未実装"
+
+-- applySpecial Let (List bindings) =
+
+-- (let ((a b) (c d)) expr)
+
+-- bind :: Cons -> Env () =
 
 -- env
 
@@ -54,14 +70,15 @@ popEnv = modify tail
 
 -- lib
 
-list :: [Data] -> Data
-list [x] = List x Nil
-list (x : xs) = List x $ list xs
-list _ = Error "error"
-
-plusFn :: Data -> Data
-plusFn (List (Integer i) (List (Integer j) Nil)) = Integer $ i + j
-plusFn _ = Error "plus Error"
+plusFn :: Data -> Env Data
+plusFn (List (Integer i, List (Integer j, Nil))) = return $ Integer (i + j)
+plusFn _ = return $ Error "plus Error"
 
 plus :: Data
-plus = Fn $ return . plusFn
+plus = Function plusFn
+
+-- system lib
+list :: [Data] -> Data
+list [] = Nil
+list [x] = List (x, Nil)
+list (x : xs) = List (x, list xs)
